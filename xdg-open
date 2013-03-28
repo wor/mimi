@@ -2,6 +2,8 @@
 
 CONFIG="$HOME/.config/mimi/mime.conf"
 
+DESKTOP_FILE_PATHS=("${HOME}/.local/share/applications/" /usr/share/applications/ /usr/local/share/applications/)
+
 find_in_config() {
     [[ -r "$CONFIG" ]] || return
     grep -m 1 "^$1: " "$CONFIG" | cut -d ' ' -f 2-
@@ -19,8 +21,21 @@ find_terminal() {
     find_exec_in_desktop_file "$(find_desktop_file_by Categories TerminalEmulator)"
 }
 
+# Finds {key,value} pairs in .desktop or similar files found from paths defined in
+# DESKTOP_FILE_PATHS array.
+# The value pair is separated by "=" character as specified by:
+#   http://standards.freedesktop.org/desktop-entry-spec/latest/ar01s02.html
+# $1: Key
+# $2: Value
 find_desktop_file_by() {
-    grep -m 1 "^$1=.*$2" -R /usr/share/applications/ | awk -F : -v pat="$2" '{ print index($2, pat), length($2), $1 }' | sort -t ' ' -k1,1n -k2,2nr | head -n 1 | cut -d ' ' -f 3
+    for desktop_path in "${DESKTOP_FILE_PATHS[@]}"; do
+        [[ -d "${desktop_path}" ]] || continue
+        grep -m 1 "^$1=.*$2" -R "${desktop_path}" \
+            | awk -F : -v pat="$2" '{ print index($2, pat), length($2), $1 }' \
+            | sort -t ' ' -k1,1n -k2,2nr \
+            | head -n 1 \
+            | cut -d ' ' -f 3
+    done
 }
 
 usage() {
@@ -105,7 +120,6 @@ for search in $mime $general_mime; do
     desktop="$(find_desktop_file_by MimeType "$search")"
     if [[ "$desktop" != "" ]]; then
         # find our own
-        echo "$desktop"
         app="$(find_exec_in_desktop_file "$desktop")"
         if need_terminal "$desktop" && [[ "$terminal" != "" ]]; then
             ("$terminal" -e "$app" "$arg") &
